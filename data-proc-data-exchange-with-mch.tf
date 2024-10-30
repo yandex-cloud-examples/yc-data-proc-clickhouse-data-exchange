@@ -1,16 +1,16 @@
-# Infrastructure for the Yandex Cloud Managed Service for ClickHouse, Data Proc, and Object Storage
+# Infrastructure for the Yandex Cloud Managed Service for ClickHouse, Yandex Data Processing, and Object Storage
 #
 # RU: https://cloud.yandex.ru/docs/data-proc/tutorials/exchange-data-with-mch
 # EN: https://cloud.yandex.com/en/docs/data-proc/tutorials/exchange-data-with-mch
 #
-# Set the configuration of the Managed Service for ClickHouse cluster, Data Proc cluster, and Object Storage
+# Set the configuration of the Managed Service for ClickHouse cluster, Yandex Data Processing cluster, and Object Storage
 
 locals {
   # Specify the following settings:
   folder_id = "" # Your cloud folder ID, same as for provider
   input_bucket  = "" # Name of an Object Storage bucket for input files. Must be unique in the Cloud
   output_bucket = "" # Name of an Object Storage bucket for output files. Must be unique in the Cloud
-  dp_ssh_key = "" # An absolute path to the SSH public key for the Data Proc cluster
+  dp_ssh_key = "" # An absolute path to the SSH public key for the Yandex Data Processing cluster
   mch_password = "" # A user password for the ClickHouse cluster
 
   # The following settings are predefined. Change them only if necessary.
@@ -19,24 +19,24 @@ locals {
   subnet_name = "dataproc-ch-subnet-a" # Name of the subnet
   dp_sa_name = "dataproc-sa" # Name of the service account for DataProc
   os_sa_name = "sa-for-obj-storage" # Name of the service account for Object Storage creating
-  dataproc_name = "dataproc-cluster" # Name of the Data Proc cluster
+  dataproc_name = "dataproc-cluster" # Name of the Yandex Data Processing cluster
   mch_name = "mch-cluster" # Name of the Managed Service for ClickHouse cluster
   mch_db_name = "db1" # Name of the ClickHouse database
   mch_user_name = "user1" # Name of the ClickHouse admin user
 }
 
 resource "yandex_vpc_network" "dataproc_ch_network" {
-  description = "Network for Data Proc and Managed Service for ClickHouse"
+  description = "Network for Yandex Data Processing and Managed Service for ClickHouse"
   name        = local.network_name
 }
 
-# NAT gateway for Data Proc
+# NAT gateway for Yandex Data Processing
 resource "yandex_vpc_gateway" "dataproc_nat" {
   name = local.nat_name
   shared_egress_gateway {}
 }
 
-# Route table for Data Proc
+# Route table for Yandex Data Processing
 resource "yandex_vpc_route_table" "dataproc-rt" {
   network_id = yandex_vpc_network.dataproc_ch_network.id
 
@@ -47,7 +47,7 @@ resource "yandex_vpc_route_table" "dataproc-rt" {
 }
 
 resource "yandex_vpc_subnet" "dataproc_ch_subnet-a" {
-  description    = "Subnet ru-central1-a availability zone for Data Proc and Managed Service for ClickHouse"
+  description    = "Subnet in the ru-central1-a availability zone for Yandex Data Processing and Managed Service for ClickHouse"
   name           = local.subnet_name
   zone           = "ru-central1-a"
   network_id     = yandex_vpc_network.dataproc_ch_network.id
@@ -56,7 +56,7 @@ resource "yandex_vpc_subnet" "dataproc_ch_subnet-a" {
 }
 
 resource "yandex_vpc_security_group" "dataproc-security-group" {
-  description = "Security group for the Data Proc cluster"
+  description = "Security group for the Yandex Data Processing cluster"
   network_id  = yandex_vpc_network.dataproc_ch_network.id
 
   ingress {
@@ -118,18 +118,18 @@ resource "yandex_vpc_security_group" "mch_security_group" {
 }
 
 resource "yandex_iam_service_account" "dataproc-sa" {
-  description = "Service account to manage the Data Proc cluster"
+  description = "Service account to manage the Yandex Data Processing cluster"
   name        = local.dp_sa_name
 }
 
-# Assign the `dataproc.agent` role to the Data Proc service account.
+# Assign the `dataproc.agent` role to the Yandex Data Processing service account.
 resource "yandex_resourcemanager_folder_iam_binding" "dataproc-agent" {
   folder_id = local.folder_id
   role      = "dataproc.agent"
   members   = ["serviceAccount:${yandex_iam_service_account.dataproc-sa.id}"]
 }
 
-# Assign the `dataproc.provisioner` role to the Data Proc service account.
+# Assign the `dataproc.provisioner` role to the Yandex Data Processing service account.
 resource "yandex_resourcemanager_folder_iam_binding" "dataproc-provisioner" {
   folder_id = local.folder_id
   role      = "dataproc.provisioner"
@@ -156,7 +156,7 @@ resource "yandex_iam_service_account_static_access_key" "sa-static-key" {
   service_account_id = yandex_iam_service_account.sa-for-obj-storage.id
 }
 
-# Use keys to create an input bucket and grant permission to Data Proc service account to read from the bucket.
+# Use keys to create an input bucket and grant permission to the Yandex Data Processing service account to read from the bucket.
 resource "yandex_storage_bucket" "input-bucket" {
   access_key = yandex_iam_service_account_static_access_key.sa-static-key.access_key
   secret_key = yandex_iam_service_account_static_access_key.sa-static-key.secret_key
@@ -169,7 +169,7 @@ resource "yandex_storage_bucket" "input-bucket" {
   }
 }
 
-# Use keys to create an output bucket and grant permission to Data Proc service account to read from the bucket and write to it.
+# Use keys to create an output bucket and grant permission to the Yandex Data Processing service account to read from the bucket and write to it.
 resource "yandex_storage_bucket" "output-bucket" {
   access_key = yandex_iam_service_account_static_access_key.sa-static-key.access_key
   secret_key = yandex_iam_service_account_static_access_key.sa-static-key.secret_key
@@ -183,7 +183,7 @@ resource "yandex_storage_bucket" "output-bucket" {
 }
 
 resource "yandex_dataproc_cluster" "dataproc-cluster" {
-  description        = "Data Proc cluster"
+  description        = "Yandex Data Processing cluster"
   depends_on         = [yandex_resourcemanager_folder_iam_binding.dataproc-agent,yandex_resourcemanager_folder_iam_binding.dataproc-provisioner]
   bucket             = yandex_storage_bucket.output-bucket.id
   security_group_ids = [yandex_vpc_security_group.dataproc-security-group.id]
