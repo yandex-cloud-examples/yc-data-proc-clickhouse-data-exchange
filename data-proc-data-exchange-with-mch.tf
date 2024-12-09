@@ -83,6 +83,13 @@ resource "yandex_vpc_security_group" "dataproc-security-group" {
   }
 
   egress {
+    description    = "Allow access to NTP servers for time syncing"
+    protocol       = "UDP"
+    port           = 123
+    v4_cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  egress {
     description    = "Allow connections to the ClickHouse port from any IP address"
     protocol       = "TCP"
     port           = 8443
@@ -162,6 +169,10 @@ resource "yandex_storage_bucket" "input-bucket" {
   secret_key = yandex_iam_service_account_static_access_key.sa-static-key.secret_key
   bucket     = local.input_bucket
 
+  depends_on = [
+    yandex_resourcemanager_folder_iam_binding.s3-editor
+  ]
+
   grant {
     id          = yandex_iam_service_account.dataproc-sa.id
     type        = "CanonicalUser"
@@ -174,6 +185,10 @@ resource "yandex_storage_bucket" "output-bucket" {
   access_key = yandex_iam_service_account_static_access_key.sa-static-key.access_key
   secret_key = yandex_iam_service_account_static_access_key.sa-static-key.secret_key
   bucket     = local.output_bucket
+
+  depends_on = [
+    yandex_resourcemanager_folder_iam_binding.s3-editor
+  ]
 
   grant {
     id          = yandex_iam_service_account.dataproc-sa.id
@@ -197,7 +212,7 @@ resource "yandex_dataproc_cluster" "dataproc-cluster" {
 
     hadoop {
       services        = ["HDFS", "SPARK", "YARN"]
-      ssh_public_keys = [file(local.dp_ssh_key)]
+      ssh_public_keys = ["${file(local.dp_ssh_key)}"]
     }
 
     subcluster_spec {
