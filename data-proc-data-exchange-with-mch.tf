@@ -151,8 +151,8 @@ resource "yandex_iam_service_account" "sa-for-obj-storage" {
   name      = local.os_sa_name
 }
 
-# Grant the service account storage.admin role to create storages and grant bucket ACLs
-resource "yandex_resourcemanager_folder_iam_binding" "s3-editor" {
+# Grant the service account storage.admin role to manage buckets and grant bucket ACLs
+resource "yandex_resourcemanager_folder_iam_binding" "s3-admin" {
   folder_id = local.folder_id
   role      = "storage.admin"
   members   = ["serviceAccount:${yandex_iam_service_account.sa-for-obj-storage.id}"]
@@ -170,7 +170,7 @@ resource "yandex_storage_bucket" "input-bucket" {
   bucket     = local.input_bucket
 
   depends_on = [
-    yandex_resourcemanager_folder_iam_binding.s3-editor
+    yandex_resourcemanager_folder_iam_binding.s3-admin
   ]
 
   grant {
@@ -187,7 +187,7 @@ resource "yandex_storage_bucket" "output-bucket" {
   bucket     = local.output_bucket
 
   depends_on = [
-    yandex_resourcemanager_folder_iam_binding.s3-editor
+    yandex_resourcemanager_folder_iam_binding.s3-admin
   ]
 
   grant {
