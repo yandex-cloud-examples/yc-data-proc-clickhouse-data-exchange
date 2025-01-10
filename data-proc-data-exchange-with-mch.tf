@@ -83,6 +83,13 @@ resource "yandex_vpc_security_group" "dataproc-security-group" {
   }
 
   egress {
+    description    = "Allow access to NTP servers for time syncing"
+    protocol       = "UDP"
+    port           = 123
+    v4_cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  egress {
     description    = "Allow connections to the ClickHouse port from any IP address"
     protocol       = "TCP"
     port           = 8443
@@ -122,14 +129,14 @@ resource "yandex_iam_service_account" "dataproc-sa" {
   name        = local.dp_sa_name
 }
 
-# Assign the `dataproc.agent` role to the Yandex Data Processing service account.
+# Assign the dataproc.agent role to the Yandex Data Processing service account
 resource "yandex_resourcemanager_folder_iam_binding" "dataproc-agent" {
   folder_id = local.folder_id
   role      = "dataproc.agent"
   members   = ["serviceAccount:${yandex_iam_service_account.dataproc-sa.id}"]
 }
 
-# Assign the `dataproc.provisioner` role to the Yandex Data Processing service account.
+# Assign the dataproc.provisioner role to the Yandex Data Processing service account
 resource "yandex_resourcemanager_folder_iam_binding" "dataproc-provisioner" {
   folder_id = local.folder_id
   role      = "dataproc.provisioner"
@@ -138,14 +145,14 @@ resource "yandex_resourcemanager_folder_iam_binding" "dataproc-provisioner" {
 
 # Yandex Object Storage bucket
 
-# Create a service account for Object Storage creation.
+# Create a service account for Object Storage creation
 resource "yandex_iam_service_account" "sa-for-obj-storage" {
   folder_id = local.folder_id
   name      = local.os_sa_name
 }
 
-# Grant the service account storage.admin role to create storages and grant bucket ACLs.
-resource "yandex_resourcemanager_folder_iam_binding" "s3-editor" {
+# Grant the service account storage.admin role to manage buckets and grant bucket ACLs
+resource "yandex_resourcemanager_folder_iam_binding" "s3-admin" {
   folder_id = local.folder_id
   role      = "storage.admin"
   members   = ["serviceAccount:${yandex_iam_service_account.sa-for-obj-storage.id}"]
@@ -156,11 +163,15 @@ resource "yandex_iam_service_account_static_access_key" "sa-static-key" {
   service_account_id = yandex_iam_service_account.sa-for-obj-storage.id
 }
 
-# Use keys to create an input bucket and grant permission to the Yandex Data Processing service account to read from the bucket.
+# Use keys to create an input bucket and grant permission to the Yandex Data Processing service account to read from the bucket
 resource "yandex_storage_bucket" "input-bucket" {
   access_key = yandex_iam_service_account_static_access_key.sa-static-key.access_key
   secret_key = yandex_iam_service_account_static_access_key.sa-static-key.secret_key
   bucket     = local.input_bucket
+
+  depends_on = [
+    yandex_resourcemanager_folder_iam_binding.s3-admin
+  ]
 
   grant {
     id          = yandex_iam_service_account.dataproc-sa.id
@@ -169,11 +180,15 @@ resource "yandex_storage_bucket" "input-bucket" {
   }
 }
 
-# Use keys to create an output bucket and grant permission to the Yandex Data Processing service account to read from the bucket and write to it.
+# Use keys to create an output bucket and grant permission to the Yandex Data Processing service account to read from the bucket and write to it
 resource "yandex_storage_bucket" "output-bucket" {
   access_key = yandex_iam_service_account_static_access_key.sa-static-key.access_key
   secret_key = yandex_iam_service_account_static_access_key.sa-static-key.secret_key
   bucket     = local.output_bucket
+
+  depends_on = [
+    yandex_resourcemanager_folder_iam_binding.s3-admin
+  ]
 
   grant {
     id          = yandex_iam_service_account.dataproc-sa.id
