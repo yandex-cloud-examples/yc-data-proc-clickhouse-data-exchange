@@ -7,22 +7,22 @@
 
 locals {
   # Specify the following settings:
-  folder_id = "" # Your cloud folder ID, same as for provider
+  folder_id     = "" # Your cloud folder ID, same as for provider
   input_bucket  = "" # Name of an Object Storage bucket for input files. Must be unique in the Cloud
   output_bucket = "" # Name of an Object Storage bucket for output files. Must be unique in the Cloud
-  dp_ssh_key = "" # An absolute path to the SSH public key for the Yandex Data Processing cluster
-  mch_password = "" # A user password for the ClickHouse cluster
+  dp_ssh_key    = "" # An absolute path to the SSH public key for the Yandex Data Processing cluster
+  mch_password  = "" # A user password for the ClickHouse cluster
 
   # The following settings are predefined. Change them only if necessary.
-  network_name = "dataproc-ch-network" # Name of the network
-  nat_name = "dataproc-nat" # Name of the NAT gateway
-  subnet_name = "dataproc-ch-subnet-a" # Name of the subnet
-  dp_sa_name = "dataproc-sa" # Name of the service account for DataProc
-  os_sa_name = "sa-for-obj-storage" # Name of the service account for Object Storage creating
-  dataproc_name = "dataproc-cluster" # Name of the Yandex Data Processing cluster
-  mch_name = "mch-cluster" # Name of the Managed Service for ClickHouse cluster
-  mch_db_name = "db1" # Name of the ClickHouse database
-  mch_user_name = "user1" # Name of the ClickHouse admin user
+  network_name  = "dataproc-ch-network"  # Name of the network
+  nat_name      = "dataproc-nat"         # Name of the NAT gateway
+  subnet_name   = "dataproc-ch-subnet-a" # Name of the subnet
+  dp_sa_name    = "dataproc-sa"          # Name of the service account for DataProc
+  os_sa_name    = "sa-for-obj-storage"   # Name of the service account for Object Storage creating
+  dataproc_name = "dataproc-cluster"     # Name of the Yandex Data Processing cluster
+  mch_name      = "mch-cluster"          # Name of the Managed Service for ClickHouse cluster
+  mch_db_name   = "db1"                  # Name of the ClickHouse database
+  mch_user_name = "user1"                # Name of the ClickHouse admin user
 }
 
 resource "yandex_vpc_network" "dataproc_ch_network" {
@@ -172,6 +172,12 @@ resource "yandex_storage_bucket" "input-bucket" {
   depends_on = [
     yandex_resourcemanager_folder_iam_binding.s3-admin
   ]
+}
+
+resource "yandex_storage_bucket_grant" "input-bucket-grant" {
+  access_key = yandex_iam_service_account_static_access_key.sa-static-key.access_key
+  secret_key = yandex_iam_service_account_static_access_key.sa-static-key.secret_key
+  bucket     = local.input_bucket
 
   grant {
     id          = yandex_iam_service_account.dataproc-sa.id
@@ -189,6 +195,12 @@ resource "yandex_storage_bucket" "output-bucket" {
   depends_on = [
     yandex_resourcemanager_folder_iam_binding.s3-admin
   ]
+}
+
+resource "yandex_storage_bucket_grant" "output-bucket-grant" {
+  access_key = yandex_iam_service_account_static_access_key.sa-static-key.access_key
+  secret_key = yandex_iam_service_account_static_access_key.sa-static-key.secret_key
+  bucket     = local.output_bucket
 
   grant {
     id          = yandex_iam_service_account.dataproc-sa.id
@@ -200,7 +212,7 @@ resource "yandex_storage_bucket" "output-bucket" {
 resource "yandex_dataproc_cluster" "dataproc-cluster" {
   description        = "Yandex Data Processing cluster"
   environment        = "PRODUCTION"
-  depends_on         = [yandex_resourcemanager_folder_iam_binding.dataproc-agent,yandex_resourcemanager_folder_iam_binding.dataproc-provisioner]
+  depends_on         = [yandex_resourcemanager_folder_iam_binding.dataproc-agent, yandex_resourcemanager_folder_iam_binding.dataproc-provisioner]
   bucket             = yandex_storage_bucket.output-bucket.id
   security_group_ids = [yandex_vpc_security_group.dataproc-security-group.id]
   name               = local.dataproc_name
@@ -249,6 +261,10 @@ resource "yandex_mdb_clickhouse_cluster" "mch-cluster" {
   network_id         = yandex_vpc_network.dataproc_ch_network.id
   security_group_ids = [yandex_vpc_security_group.mch_security_group.id]
 
+  lifecycle {
+    ignore_changes = [database, user, ]
+  }
+
   clickhouse {
     resources {
       resource_preset_id = "s2.micro" # 2 vCPU, 8 GB RAM
@@ -263,16 +279,19 @@ resource "yandex_mdb_clickhouse_cluster" "mch-cluster" {
     subnet_id        = yandex_vpc_subnet.dataproc_ch_subnet-a.id
     assign_public_ip = true # Required for connection from the Internet
   }
+}
 
-  database {
-    name = local.mch_db_name
-  }
+resource "yandex_mdb_clickhouse_database" "mch-database" {
+  cluster_id = yandex_mdb_clickhouse_cluster.mch-cluster.id
+  name       = local.mch_db_name
+}
 
-  user {
-    name     = local.mch_user_name
-    password = local.mch_password
-    permission {
-      database_name = local.mch_db_name
-    }
+resource "yandex_mdb_clickhouse_user" "mch-user" {
+  cluster_id = yandex_mdb_clickhouse_cluster.mch-cluster.id
+  name       = local.mch_user_name
+  password   = local.mch_password
+
+  permission {
+    database_name = yandex_mdb_clickhouse_database.mch-database.name
   }
 }
