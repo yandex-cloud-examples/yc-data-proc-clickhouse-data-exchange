@@ -254,40 +254,47 @@ resource "yandex_dataproc_cluster" "dataproc-cluster" {
   }
 }
 
-resource "yandex_mdb_clickhouse_cluster" "mch-cluster" {
+resource "yandex_mdb_clickhouse_cluster_v2" "mch-cluster" {
   description        = "Managed Service for ClickHouse cluster"
   name               = local.mch_name
   environment        = "PRODUCTION"
   network_id         = yandex_vpc_network.dataproc_ch_network.id
   security_group_ids = [yandex_vpc_security_group.mch_security_group.id]
 
-  lifecycle {
-    ignore_changes = [database, user, ]
-  }
-
-  clickhouse {
-    resources {
+  clickhouse = {
+    resources = {
       resource_preset_id = "s2.micro" # 2 vCPU, 8 GB RAM
       disk_type_id       = "network-ssd"
       disk_size          = 10 # GB
     }
   }
 
-  host {
-    type             = "CLICKHOUSE"
-    zone             = "ru-central1-a"
-    subnet_id        = yandex_vpc_subnet.dataproc_ch_subnet-a.id
-    assign_public_ip = true # Required for connection from the Internet
+  hosts = {
+    "ch-host1" = {
+      type             = "CLICKHOUSE"
+      zone             = "ru-central1-a"
+      subnet_id        = yandex_vpc_subnet.dataproc_ch_subnet-a.id
+      assign_public_ip = true # Required for connection from the Internet
+      shard_name       = "shard1"
+    }
+  }
+
+  shards = {
+    "shard1" = {}
+  }
+
+  maintenance_window {
+    type = "ANYTIME"
   }
 }
 
 resource "yandex_mdb_clickhouse_database" "mch-database" {
-  cluster_id = yandex_mdb_clickhouse_cluster.mch-cluster.id
+  cluster_id = yandex_mdb_clickhouse_cluster_v2.mch-cluster.id
   name       = local.mch_db_name
 }
 
 resource "yandex_mdb_clickhouse_user" "mch-user" {
-  cluster_id = yandex_mdb_clickhouse_cluster.mch-cluster.id
+  cluster_id = yandex_mdb_clickhouse_cluster_v2.mch-cluster.id
   name       = local.mch_user_name
   password   = local.mch_password
 
